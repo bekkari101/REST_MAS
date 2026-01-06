@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Multi-Agent System (REST_MAS)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0b10;
+            --panel-bg: rgba(20, 22, 35, 0.8);
+            --accent-blue: #00f2ff;
+            --accent-purple: #bc00ff;
+            --accent-orange: #ff9d00;
+            --accent-green: #00ff88;
+            --text-main: #e0e0e0;
+            --text-dim: #949494;
+            --grid-line: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(10, 11, 16, 0.9);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            grid-template-rows: 1fr 250px;
+            gap: 1rem;
+            padding: 1rem;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Grid Map */
+        .simulation-viewport {
+            position: relative;
+            background-image:
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 40px 40px;
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            margin: auto;
+            /* Center in parent */
+            overflow: visible;
+            /* Allow markers to be seen even if slightly off-pixel */
+            flex-shrink: 0;
+        }
+
+        .agent {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        .agent::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2px solid currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        .agent-waiter {
+            color: var(--accent-blue);
+            background: rgba(0, 242, 255, 0.2);
+        }
+
+        .agent-boss {
+            color: #ff0055;
+            background: rgba(255, 0, 85, 0.2);
+            border-radius: 4px;
+            /* Slightly square for boss */
+        }
+
+        .agent-chef {
+            color: var(--accent-orange);
+            background: rgba(255, 157, 0, 0.2);
+        }
+
+        .agent-client {
+            color: var(--accent-green);
+            background: rgba(0, 255, 136, 0.2);
+        }
+
+        .agent-cashier {
+            color: var(--accent-purple);
+            background: rgba(188, 0, 255, 0.2);
+        }
+
+        .agent-enter,
+        .agent-exit {
+            color: var(--text-dim);
+            background: rgba(148, 148, 148, 0.1);
+            border: 1px dashed var(--text-dim);
+        }
+
+        .agent-label {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: white;
+            pointer-events: none;
+        }
+
+        /* Log List */
+        .log-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+        }
+
+        .log-entry {
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .log-time {
+            color: var(--text-dim);
+        }
+
+        .log-msg {
+            color: var(--text-main);
+        }
+
+        /* Agent List */
+        .agent-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .agent-item {
+            padding: 0.8rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .agent-item-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .agent-item-status {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        .status-badge {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        /* Debug Console */
+        .debug-console {
+            grid-column: 1 / -1;
+            background: var(--panel-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .debug-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .debug-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .debug-filter-btn {
+            padding: 4px 8px;
+            border: 1px solid var(--glass-border);
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .debug-filter-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .debug-filter-btn.active {
+            background: var(--accent-blue);
+            color: black;
+            border-color: var(--accent-blue);
+        }
+
+        .debug-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            line-height: 1.6;
+        }
+
+        .debug-msg {
+            display: grid;
+            grid-template-columns: 80px 100px 120px 1fr;
+            gap: 0.5rem;
+            padding: 0.3rem 0.5rem;
+            border-left: 3px solid transparent;
+            margin-bottom: 0.2rem;
+            transition: background 0.2s;
+        }
+
+        .debug-msg:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .debug-msg.level-DEBUG {
+            border-left-color: var(--text-dim);
+            background: rgba(148, 148, 148, 0.03);
+        }
+
+        .debug-msg.level-INFO {
+            border-left-color: var(--accent-blue);
+            background: rgba(0, 242, 255, 0.03);
+        }
+
+        .debug-msg.level-WARNING {
+            border-left-color: var(--accent-orange);
+            background: rgba(255, 157, 0, 0.03);
+        }
+
+        .debug-msg.level-ERROR {
+            border-left-color: #ff0055;
+            background: rgba(255, 0, 85, 0.05);
+        }
+
+        .debug-msg.level-SUCCESS {
+            border-left-color: var(--accent-green);
+            background: rgba(0, 255, 136, 0.03);
+        }
+
+        .debug-timestamp {
+            color: var(--text-dim);
+            font-size: 0.65rem;
+        }
+
+        .debug-agent {
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        .debug-level {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .debug-level.DEBUG {
+            background: rgba(148, 148, 148, 0.2);
+            color: var(--text-dim);
+        }
+
+        .debug-level.INFO {
+            background: rgba(0, 242, 255, 0.2);
+            color: var(--accent-blue);
+        }
+
+        .debug-level.WARNING {
+            background: rgba(255, 157, 0, 0.2);
+            color: var(--accent-orange);
+        }
+
+        .debug-level.ERROR {
+            background: rgba(255, 0, 85, 0.2);
+            color: #ff0055;
+        }
+
+        .debug-level.SUCCESS {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--accent-green);
+        }
+
+        .debug-message {
+            color: var(--text-main);
+        }
+
+        .debug-container-tag {
+            color: var(--accent-purple);
+            font-size: 0.65rem;
+            opacity: 0.7;
+        }
+
+        .btn-clear {
+            padding: 4px 12px;
+            background: rgba(255, 0, 85, 0.2);
+            border: 1px solid #ff0055;
+            color: #ff0055;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-clear:hover {
+            background: #ff0055;
+            color: white;
+        }
+
+        .btn-autoscroll {
+            padding: 4px 12px;
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-autoscroll:hover {
+            background: var(--accent-green);
+            color: black;
+        }
+
+        .btn-autoscroll.inactive {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-dim);
+            color: var(--text-dim);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--glass-border);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Restaurant Multi-Agent System (REST_MAS)</h1>
+        <div class="controls-bar" style="display: flex; gap: 2rem; align-items: center;">
+            <div id="init-panel">
+                <button id="btn-init"
+                    style="background: var(--accent-purple); color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-weight: 600;">INITIALIZE
+                    SYSTEM</button>
+            </div>
+            <div id="sim-controls" style="display: none; gap: 1rem; align-items: center;">
+                <button id="btn-play"
+                    style="background: var(--accent-green); color: black; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-weight: 600;">PLAY</button>
+                <button id="btn-stop"
+                    style="display: none; background: var(--accent-orange); color: black; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-weight: 600;">PAUSE</button>
+
+                <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem;">
+                    <span>SPEED:</span>
+                    <input type="range" id="speed-slider" min="0.5" max="5.0" step="0.5" value="1.0"
+                        style="width: 100px;">
+                    <span id="speed-val">1.0x</span>
+                </div>
+
+                <button id="btn-add-client"
+                    style="background: var(--accent-blue); color: black; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-weight: 600;">+
+                    ADD CLIENT</button>
+            </div>
+        </div>
+        <div id="connection-status" style="font-size: 0.8rem; color: var(--accent-green);">● SYSTEM ONLINE</div>
+    </header>
+
+    <div class="main-container">
+        <!-- Agent List Panel -->
+        <aside class="panel">
+            <div class="panel-header">Agents <span id="agent-count">0</span></div>
+            <div class="agent-list" id="agent-list">
+                <!-- Agents will be injected here -->
+            </div>
+        </aside>
+
+        <!-- Main Grid Panel -->
+        <main class="panel">
+            <div class="panel-header" style="display: flex; justify-content: space-between;">
+                <span>Simulation Map</span>
+                <span id="sim-status-display"
+                    style="padding: 2px 8px; border-radius: 10px; background: rgba(255,157,0,0.2); font-size: 0.7rem;">NOT
+                    INITIALIZED</span>
+            </div>
+            <div class="simulation-viewport-container"
+                style="flex-grow: 1; overflow: auto; padding: 2rem; display: flex; align-items: flex-start; justify-content: center;">
+                <div class="simulation-viewport" id="viewport">
+                    <!-- Agents will be rendered here -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Logs Panel -->
+        <aside class="panel">
+            <div class="panel-header">Real-Time Logs</div>
+            <div class="log-container" id="logs">
+                <div class="log-entry">
+                    <span class="log-time">[00:00]</span>
+                    <span class="log-msg">System initialized. Waiting to 'INITIALIZE SYSTEM'...</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Debug Console -->
+        <section class="debug-console">
+            <div class="debug-header">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">
+                        🐛 Debug Console
+                    </span>
+                    <span id="debug-count" style="font-size: 0.7rem; color: var(--text-dim);">0 messages</span>
+                </div>
+                <div class="debug-controls">
+                    <button class="debug-filter-btn active" data-level="ALL">ALL</button>
+                    <button class="debug-filter-btn" data-level="DEBUG">DEBUG</button>
+                    <button class="debug-filter-btn" data-level="INFO">INFO</button>
+                    <button class="debug-filter-btn" data-level="SUCCESS">SUCCESS</button>
+                    <button class="debug-filter-btn" data-level="WARNING">WARNING</button>
+                    <button class="debug-filter-btn" data-level="ERROR">ERROR</button>
+                    <button class="btn-autoscroll" id="btn-autoscroll">AUTO-SCROLL ✓</button>
+                    <button class="btn-clear" id="btn-clear-debug">CLEAR</button>
+                </div>
+            </div>
+            <div class="debug-messages" id="debug-messages">
+                <!-- Debug messages will appear here -->
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const agents = new Map();
+        const viewport = document.getElementById('viewport');
+        const agentList = document.getElementById('agent-list');
+        const logs = document.getElementById('logs');
+        const agentCountEl = document.getElementById('agent-count');
+        const speedSlider = document.getElementById('speed-slider');
+        const speedVal = document.getElementById('speed-val');
+        const btnPlay = document.getElementById('btn-play');
+        const btnStop = document.getElementById('btn-stop');
+        const btnInit = document.getElementById('btn-init');
+        const simStatusDisplay = document.getElementById('sim-status-display');
+
+        // Debug console elements
+        const debugMessages = document.getElementById('debug-messages');
+        const debugCount = document.getElementById('debug-count');
+        const btnClearDebug = document.getElementById('btn-clear-debug');
+        const btnAutoscroll = document.getElementById('btn-autoscroll');
+        const filterButtons = document.querySelectorAll('.debug-filter-btn');
+
+        let debugFilter = 'ALL';
+        let autoScroll = true;
+        let lastDebugTimestamp = 0;
+
+        // Grid configuration (dynamic)
+        let GRID_SIZE = 10;
+        let GRID_WIDTH = 120;
+        let GRID_HEIGHT = 120;
+
+        function updateSimulation() {
+            // Get Agents
+            fetch('/agents')
+                .then(res => res.json())
+                .then(data => {
+                    processAgents(data);
+                })
+                .catch(err => {
+                    // console.error("Error fetching agents:", err);
+                    document.getElementById('connection-status').textContent = "● SYSTEM OFFLINE";
+                    document.getElementById('connection-status').style.color = "var(--accent-orange)";
+                });
+
+            // Get Sync Control State
+            fetch('/control')
+                .then(res => res.json())
+                .then(state => {
+                    if (state.grid_width && (state.grid_width !== GRID_WIDTH || state.grid_height !== GRID_HEIGHT)) {
+                        GRID_WIDTH = state.grid_width;
+                        GRID_HEIGHT = state.grid_height;
+                        resizeGrid();
+                    }
+                    updateUIFromState(state);
+                });
+
+            // Get Debug Messages
+            updateDebugMessages();
+        }
+
+        function resizeGrid() {
+            const vpWidth = viewport.clientWidth;
+            const vpHeight = viewport.clientHeight;
+
+            // Calculate scale to fit at least one dimension
+            const scaleX = (vpWidth - 40) / GRID_WIDTH;
+            const scaleY = (vpHeight - 40) / GRID_HEIGHT;
+
+            GRID_SIZE = Math.max(5, Math.min(scaleX, scaleY)); // Min 5px per cell
+
+            viewport.style.width = `${GRID_WIDTH * GRID_SIZE}px`;
+            viewport.style.height = `${GRID_HEIGHT * GRID_SIZE}px`;
+            viewport.style.backgroundSize = `${GRID_SIZE}px ${GRID_SIZE}px`;
+
+            console.log(`Grid resized: ${GRID_WIDTH}x${GRID_HEIGHT} at ${GRID_SIZE.toFixed(1)}px/cell`);
+
+            // Refresh all markers
+            agents.forEach((obj, id) => {
+                const agentData = obj.lastData;
+                if (agentData) updateAgent(agentData);
+            });
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', resizeGrid);
+
+        function updateUIFromState(state) {
+            if (state.initialized) {
+                document.getElementById('init-panel').style.display = 'none';
+                document.getElementById('sim-controls').style.display = 'flex';
+                simStatusDisplay.textContent = state.running ? "RUNNING" : "PAUSED";
+                simStatusDisplay.style.background = state.running ? "rgba(0, 255, 136, 0.2)" : "rgba(188, 0, 255, 0.2)";
+
+                btnPlay.style.display = state.running ? 'none' : 'block';
+                btnStop.style.display = state.running ? 'block' : 'none';
+
+                speedVal.textContent = state.speed.toFixed(1) + 'x';
+            }
+        }
+
+        function sendControl(update) {
+            console.log("Sending control update:", update);
+            fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(update)
+            })
+                .then(res => res.json())
+                .then(state => {
+                    console.log("Control update successful, new state:", state);
+                    updateUIFromState(state);
+                })
+                .catch(err => {
+                    console.error("Error sending control:", err);
+                    addLog("Communication error. See console.");
+                });
+        }
+
+        btnInit.onclick = () => {
+            console.log("Initialize button clicked");
+            sendControl({ initialized: true });
+            addLog("System initialization requested...");
+        };
+
+        btnPlay.onclick = () => {
+            console.log("Play button clicked");
+            sendControl({ running: true });
+            addLog("Simulation START requested.");
+        };
+
+        btnStop.onclick = () => {
+            console.log("Stop button clicked");
+            sendControl({ running: false });
+            addLog("Simulation PAUSE requested.");
+        };
+
+        speedSlider.oninput = () => {
+            const speed = parseFloat(speedSlider.value);
+            sendControl({ speed: speed });
+        };
+
+        document.getElementById('btn-add-client').onclick = () => {
+            console.log("Add Client button clicked");
+            fetch('/add_client', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(res => res.json())
+                .then(result => {
+                    console.log("Add client result:", result);
+                    if (result.status === 'success') {
+                        addLog(`New client ${result.client_name} added to simulation`);
+                    } else {
+                        addLog(`Failed to add client: ${result.message}`);
+                    }
+                })
+                .catch(err => {
+                    console.error("Error adding client:", err);
+                    addLog("Error adding client. See console.");
+                });
+        };
+
+        function processAgents(data) {
+            const currentIds = new Set(data.map(a => a.id));
+
+            // Remove agents that are gone
+            for (let [id, el] of agents) {
+                if (!currentIds.has(id)) {
+                    el.marker.remove();
+                    el.listItem.remove();
+                    agents.delete(id);
+                    addLog(`Agent ${id} disconnected.`);
+                }
+            }
+
+            data.forEach(agentData => {
+                if (!agents.has(agentData.id)) {
+                    createAgent(agentData);
+                    addLog(`Agent ${agentData.id} (${agentData.type}) joined simulation.`);
+                } else {
+                    updateAgent(agentData);
+                }
+            });
+
+            agentCountEl.textContent = agents.size;
+        }
+
+        function createAgent(data) {
+            const marker = document.createElement('div');
+            marker.className = `agent agent-${data.type}`;
+            marker.id = `marker-${data.id}`;
+            marker.innerHTML = `<span class="agent-label">${data.id}</span>`;
+            if (data.status === 'WAITING') marker.classList.add('waiting');
+            viewport.appendChild(marker);
+
+            const listItem = document.createElement('div');
+            listItem.className = 'agent-item';
+            listItem.id = `list-${data.id}`;
+            agentList.appendChild(listItem);
+
+            const agentObj = { marker, listItem, lastPos: { x: data.x, y: data.y } };
+            agents.set(data.id, agentObj);
+
+            updateAgent(data);
+        }
+
+        function updateAgent(data) {
+            const agent = agents.get(data.id);
+            const marker = agent.marker;
+            const listItem = agent.listItem;
+            agent.lastData = data; // Keep for resizing
+
+            // Update classes
+            marker.className = `agent agent-${data.type}`;
+            if (data.status === 'WAITING') marker.classList.add('waiting');
+
+            // Update marker position
+            // Convert grid coords to pixels
+            const left = data.x * GRID_SIZE;
+            const top = data.y * GRID_SIZE;
+            marker.style.left = `${left}px`;
+            marker.style.top = `${top}px`;
+
+            // Adjust marker size if grid is very small
+            const markerSize = Math.max(12, Math.min(32, GRID_SIZE * 2));
+            marker.style.width = `${markerSize}px`;
+            marker.style.height = `${markerSize}px`;
+
+            // Update list item
+            listItem.innerHTML = `
+                <div class="agent-item-header">
+                    <span>${data.id}</span>
+                    <span class="status-badge">${data.type.toUpperCase()}</span>
+                </div>
+                <div class="agent-item-status">
+                    Pos: (${data.x.toFixed(1)}, ${data.y.toFixed(1)}) | State: ${data.status || 'IDLE'}
+                </div>
+            `;
+
+            // If status changed, log it (simple check)
+            if (agent.lastStatus !== data.status) {
+                addLog(`${data.id}: New status - ${data.status}`);
+                agent.lastStatus = data.status;
+            }
+        }
+
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString([], { hour12: false, minute: '2-digit', second: '2-digit' }).split(' ')[0];
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-msg">${msg}</span>`;
+            logs.prepend(entry);
+            if (logs.children.length > 50) logs.lastChild.remove();
+        }
+
+        // Debug Console Functions
+        function updateDebugMessages() {
+            fetch(`/debug?limit=200`)
+                .then(res => res.json())
+                .then(messages => {
+                    if (messages.length === 0) return;
+
+                    // Check if there are new messages
+                    const latestTimestamp = messages[messages.length - 1]?.timestamp || 0;
+                    if (latestTimestamp <= lastDebugTimestamp) return;
+
+                    lastDebugTimestamp = latestTimestamp;
+
+                    // Filter messages based on selected filter
+                    const filteredMessages = debugFilter === 'ALL' 
+                        ? messages 
+                        : messages.filter(m => m.level === debugFilter);
+
+                    // Clear and render
+                    debugMessages.innerHTML = '';
+                    filteredMessages.forEach(msg => {
+                        addDebugMessage(msg);
+                    });
+
+                    debugCount.textContent = `${filteredMessages.length} messages`;
+
+                    if (autoScroll) {
+                        debugMessages.scrollTop = debugMessages.scrollHeight;
+                    }
+                })
+                .catch(err => {
+                    console.error("Error fetching debug messages:", err);
+                });
+        }
+
+        function addDebugMessage(msg) {
+            const timestamp = new Date(msg.timestamp * 1000).toLocaleTimeString([], { 
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit',
+                fractionalSecondDigits: 1
+            });
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `debug-msg level-${msg.level}`;
+            
+            const detailsStr = msg.details && Object.keys(msg.details).length > 0 
+                ? ` | ${JSON.stringify(msg.details)}` 
+                : '';
+
+            msgDiv.innerHTML = `
+                <span class="debug-timestamp">${timestamp}</span>
+                <span class="debug-agent">${msg.agent_id}</span>
+                <span class="debug-level ${msg.level}">${msg.level}</span>
+                <span class="debug-message">
+                    <span class="debug-container-tag">[${msg.container}]</span> 
+                    ${msg.message}${detailsStr}
+                </span>
+            `;
+
+            debugMessages.appendChild(msgDiv);
+        }
+
+        // Debug Console Controls
+        filterButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                filterButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                debugFilter = btn.dataset.level;
+                updateDebugMessages();
+            });
+        });
+
+        btnClearDebug.addEventListener('click', () => {
+            fetch('/debug/clear', { method: 'POST' })
+                .then(() => {
+                    debugMessages.innerHTML = '';
+                    debugCount.textContent = '0 messages';
+                    lastDebugTimestamp = 0;
+                })
+                .catch(err => console.error("Error clearing debug:", err));
+        });
+
+        btnAutoscroll.addEventListener('click', () => {
+            autoScroll = !autoScroll;
+            btnAutoscroll.classList.toggle('inactive', !autoScroll);
+            btnAutoscroll.textContent = autoScroll ? 'AUTO-SCROLL ✓' : 'AUTO-SCROLL ✗';
+        });
+
+        // Poll every 100ms for smooth-ish updates
+        setInterval(updateSimulation, 100);
+    </script>
+</body>
+
+</html>
